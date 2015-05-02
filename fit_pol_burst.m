@@ -1,3 +1,7 @@
+try
+  mpi_init;
+end
+
 if ~exist('dat')
   dat_raw=read_npy('calibrated.npy');
   freq=read_npy('freq.npy');
@@ -75,13 +79,18 @@ best_guess(end+1:end+2)=[-384 66*pi/180];
 best_guess(4)=1.5;
 sigs(end+1:end+2)=[2 2*pi/180];
 
-crap=load('chain_polfit.txt');best_guess=mean(crap(round(end/2):end,2:end));
+crap=load('chain_polfit2.txt');best_guess=mean(crap(round(end/2):end,2:end));
 sigs=std(crap(round(end/2):end,2:end));
 best_guess(4)=1.837;sigs(4)=0.17;
 best_guess(end-1)=-373.66;sigs(end-1)=5.2;
 best_guess(end)=3.211;sigs(end)=0.093;
 
 [pp,ll,qft,uft,nvec]=mcmc_burst_polfit(dat_q_use,dat_u_use,freq_use,best_guess,sigs*0.5,dt,1.0);
+
+try 
+  mpi_barrier;
+end
+
 
 %big_RM=(-450:-330)';big_amp=0*big_RM+best_guess(4);big_phi=0*big_RM*0+best_guess(end);
 

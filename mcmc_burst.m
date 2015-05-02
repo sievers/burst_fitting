@@ -17,12 +17,17 @@ nn=ceil((n+1)/2);
 dataft=dataft(1:nn,:);
 
 
-nstep=3000;
+nstep=300000;
 pp=zeros(nstep,numel(guess));
 ll=zeros(nstep,1);
 cur=guess;
-nvec=0.5./mean(abs(dataft(imin:end,:)).^2);
-nmat=repmat(nvec,[n 1]);
+
+%nvec=0.5./mean(abs(dataft(imin:end,:)).^2);
+noises=0.5*mean(abs(dataft(imin:end,:)).^2);
+nvec=1.0./noises;
+
+
+%nmat=repmat(nvec,[n 1]);
 
 
 if exist('true_params')
@@ -30,7 +35,13 @@ if exist('true_params')
 end
 
 
-fid=fopen('chain.txt','w');
+try
+  myid=mpi_comm_rank;
+  fid=fopen(['chain_ttfit.txt_' num2str(myid)],'w');
+catch
+  fid=fopen('chain_ttfit.txt','w');
+end
+
 
 %fwhm=guess(1);
 %scat=guess(2);
@@ -80,7 +91,7 @@ for j=2:nstep
     pp(j,:)=cur;
   end
   fprintf(fid,'%14.7f ',ll(j));
-  fprintf(fid,'%12.5g ',pp(j,:));
+  fprintf(fid,'%14.8g ',pp(j,:));
   fprintf(fid,'\n');
   fflush(fid);
 

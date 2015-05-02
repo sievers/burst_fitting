@@ -20,12 +20,12 @@ uft=fft(dat_u);
 uft=uft(1:nn,:);
 
 
-nstep=30000;
+nstep=300000;
 pp=zeros(nstep,numel(guess));
 ll=zeros(nstep,1);
 cur=guess;
-nvec=0.5./mean(abs(qft(imin:end,:)).^2);
-nvec2=0.5./mean(abs(uft(imin:end,:)).^2);
+nvec=2.0./mean(abs(qft(imin:end,:)).^2);
+nvec2=2.0./mean(abs(uft(imin:end,:)).^2);
 disp(['error consistency is ' num2str([mean(abs(nvec-nvec2))/mean(abs(nvec))])]);
 nmat=repmat(nvec,[n 1]);
 
@@ -35,7 +35,13 @@ if exist('true_params')
 end
 
 
-fid=fopen('chain_polfit2.txt','w');
+try
+  myid=mpi_comm_rank;
+  fid=fopen(['chain_polfit_fixed.txt_' num2str(myid)],'w');
+catch
+  fid=fopen('chain_polfit_fixed.txt','w');
+end
+
 
 %fwhm=guess(1);
 %scat=guess(2);

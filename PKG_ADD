@@ -3,5 +3,6 @@ autoload('make_burst_model_c',fullfile(fileparts(mfilename("fullpath")),'burst_r
 autoload('get_burst_chisq_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
 autoload('get_burst_chisq_ampfit_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
 autoload('get_burst_chisq_qu_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
+autoload('get_burst_chisq_qu_rmpow_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
 autoload('get_burst_many_chisq_qu_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
 

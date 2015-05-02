@@ -149,7 +149,7 @@ DEFUN_DLD (get_burst_chisq_c, args, nargout, "Calculate chisq for an FRB, brute-
   FloatColumnVector guess=args(0).float_column_vector_value();
 
   float fwhm=guess(0);
-  float scat=guess(1);
+  float scat=1.0/guess(1);
   float alpha=guess(2);
   float amp=guess(3);
   float t0=guess(4);
@@ -245,6 +245,35 @@ DEFUN_DLD (get_burst_chisq_qu_c, args, nargout, "Calculate chisq for an FRB, bru
   //retval(1)=amp;
   return retval;
   //return octave_value(chisq);
+    
+}
+
+/*--------------------------------------------------------------------------------*/
+
+DEFUN_DLD (get_burst_chisq_qu_rmpow_c, args, nargout, "Calculate chisq for an FRB, brute-force, power law of rotation measure can be !=2\n")
+{
+  if (args.length()<8) {
+    printf("Need 8 args to get_burst_chisq_qu_rmpow_c.\n");
+    return octave_value_list();
+  }
+  FloatColumnVector guess=args(0).float_column_vector_value();
+
+  
+  FloatComplexMatrix dat_q=args(1).float_complex_matrix_value();;
+  FloatComplexMatrix dat_u=args(2).float_complex_matrix_value();;
+
+  //dim_vector dm=dat.dims();
+  //FloatComplexMatrix mat(dm);
+  FloatColumnVector freqs=args(3).float_column_vector_value();
+  int n=(int)get_value(args(4));
+  FloatColumnVector nvec=args(5).float_column_vector_value();
+  float dt=(float)get_value(args(6));
+  int imin=(int)get_value(args(7));
+  
+  //double chisq=calculate_chisq(dat.fortran_vec(),nvec.fortran_vec(),imin,dt,fwhm,scat,alpha,amp,t0,DM,freqs.fortran_vec(),freqs.length(),n,mat.fortran_vec());
+  double chisq=calculate_chisq_qu_rmpow(dat_q.fortran_vec(),dat_u.fortran_vec(),nvec.fortran_vec(),imin,dt,guess.fortran_vec(),freqs.fortran_vec(),freqs.length(),n);
+
+  return octave_value(chisq);
     
 }
 
