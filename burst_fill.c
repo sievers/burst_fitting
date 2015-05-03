@@ -190,7 +190,7 @@ void fill_model(float dt, float fwhm, float scat, float alpha, float t0, float D
 
 
 /*--------------------------------------------------------------------------------*/
-//double calculate_chisq(void *dat_in, float *weights, int imin,float dt, float fwhm, float scat, float alpha, float amp, float t0, float DM, float *freq, int nfreq, int n, void *mat_in)
+
 double calculate_chisq(void *dat_in, float *weights, int imin,float dt, float fwhm, float scat, float alpha, float amp, float t0, float DM, float *freq, int nfreq, int n)
 {
 
@@ -229,8 +229,55 @@ double calculate_chisq(void *dat_in, float *weights, int imin,float dt, float fw
 }
 
 /*--------------------------------------------------------------------------------*/
+
+
+double calculate_chisq_cached(void *dat_in, float *weights, int imin,float dt, float *params, float *freq, int nfreq, int n, void *cached_in)
+{
+
+  float fwhm=params[0];
+  float scat=1.0/params[1];
+  float alpha=params[2];
+  float amp=params[3];
+  float t0=params[4];
+  float DM=params[5];
+
+  int nn=1+n/2;
+  
+
+  scat=scat*dt;
+  t0=1+t0/dt;  //burst_model is expecting t0 to be in samples
+  //float complex *mat=(float complex *)mat_in;
+  float complex *mat=(float complex *)cached_in;
+  //fill_model(dt,fwhm,scat,alpha,t0,DM,freq,nfreq,n,mat_in);
+  double t1=omp_get_wtime();
+  fill_model(dt,fwhm,scat,alpha,t0,DM,freq,nfreq,n,(void *)mat);
+  //printf("params are %12.5g %12.5g %12.5g %12.5g %12.5g %12.5g\n",dt,fwhm,scat,alpha,t0,DM);
+  //printf("amps are %12.6f %12.6f %12.6f\n",creal(mat[0]),creal(mat[1]),cimag(mat[1]));
+  //printf("time here is %12.5f\n",omp_get_wtime()-t1);
+  float complex *dat=(float complex *)dat_in;
+  double *all_chisq=(double *)malloc(sizeof(double)*nfreq);
+#pragma omp parallel for
+  for (int j=0;j<nfreq;j++) {
+    all_chisq[j]=0;
+    for (int i=imin;i<nn;i++)  {
+      double complex delt=amp*mat[j*nn+i]-dat[j*nn+i];
+      all_chisq[j]+=(creal(delt)*creal(delt)+cimag(delt)*cimag(delt));
+    }
+    all_chisq[j]*=weights[j];
+  }
+  //printf("time here is %12.5f\n",omp_get_wtime()-t1);
+  double chisq=0;
+  for (int i=0;i<nfreq;i++)
+    chisq+=all_chisq[i];
+  
+  free(all_chisq);
+  //free(mat);
+  return chisq;
+}
+
+/*--------------------------------------------------------------------------------*/
 //double calculate_chisq(void *dat_in, float *weights, int imin,float dt, float fwhm, float scat, float alpha, float amp, float t0, float DM, float *freq, int nfreq, int n, void *mat_in)
-double calculate_chisq(void *dat_in, float *weights, int imin,float dt, float *params, float *freq, int nfreq, int n)
+double calculate_chisq_v2(void *dat_in, float *weights, int imin,float dt, float *params, float *freq, int nfreq, int n)
 {
 
   float fwhm=params[0];

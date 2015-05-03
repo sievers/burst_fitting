@@ -20,6 +20,15 @@ extern "C"
 }  /* end extern "C" */
 #endif
 
+/*--------------------------------------------------------------------------------*/
+void *get_pointer(octave_value val)
+{
+  int64NDArray myptr=val.array_value();
+  long myptr2=myptr(0,0);
+  return (void *)myptr2;
+
+}
+
 
 
 /*--------------------------------------------------------------------------------*/
@@ -30,6 +39,33 @@ double get_value(octave_value val)
   double myval=(double)myptr(0,0);
   return myval;
 }
+
+/*--------------------------------------------------------------------------------*/
+DEFUN_DLD (freeptr,args,nargout,"Free a pointer.\n")
+{
+  void *ptr=get_pointer(args(0));
+  free(ptr);
+  return octave_value_list();
+}
+/*--------------------------------------------------------------------------------*/
+DEFUN_DLD (floatcomplex2ptr, args, nargout, "Turn a float complex matrix into a pointer.\n")
+{
+
+  FloatComplexMatrix dat=args(0).float_complex_matrix_value();
+  dim_vector dm=dat.dims();
+  long nelem=dm(0)*dm(1);
+  printf("have %ld elements in matrix.\n",nelem);
+  void *datptr=malloc(sizeof(float complex)*nelem);
+  memcpy(datptr,dat.fortran_vec(),nelem*sizeof(float complex));
+  int64NDArray myptr(1);
+  
+  myptr(0)=(long)datptr;
+  //long *ptr=myptr.fortran_vec();
+  //ptr[0]=(long)mytod;
+  return octave_value(myptr);
+}
+
+
 /*--------------------------------------------------------------------------------*/
 
 
@@ -168,6 +204,34 @@ DEFUN_DLD (get_burst_chisq_c, args, nargout, "Calculate chisq for an FRB, brute-
   
   //double chisq=calculate_chisq(dat.fortran_vec(),nvec.fortran_vec(),imin,dt,fwhm,scat,alpha,amp,t0,DM,freqs.fortran_vec(),freqs.length(),n,mat.fortran_vec());
   double chisq=calculate_chisq(dat.fortran_vec(),nvec.fortran_vec(),imin,dt,fwhm,scat,alpha,amp,t0,DM,freqs.fortran_vec(),freqs.length(),n);
+
+
+
+  return octave_value(chisq);
+    
+}
+
+/*--------------------------------------------------------------------------------*/
+
+DEFUN_DLD (get_burst_chisq_cached_c, args, nargout, "Calculate chisq for an FRB, brute-force, data should already be cached.\n")
+{
+  if (args.length()<8) {
+    printf("Need 8 args to get_burst_chisq_cached_c.\n");
+    return octave_value_list();
+  }
+  FloatColumnVector guess=args(0).float_column_vector_value();
+
+
+  void *datft=get_pointer(args(1));
+  FloatColumnVector freqs=args(2).float_column_vector_value();
+  int n=(int)get_value(args(3));
+  FloatColumnVector nvec=args(4).float_column_vector_value();
+  float dt=(float)get_value(args(5));
+  int imin=(int)get_value(args(6));
+  void *myscratch=get_pointer(args(7));
+
+  //double chisq=calculate_chisq(dat.fortran_vec(),nvec.fortran_vec(),imin,dt,fwhm,scat,alpha,amp,t0,DM,freqs.fortran_vec(),freqs.length(),n,mat.fortran_vec());
+  double chisq=calculate_chisq_cached(datft,nvec.fortran_vec(),imin,dt,guess.fortran_vec(),freqs.fortran_vec(),freqs.length(),n,myscratch);
 
 
 
@@ -320,3 +384,4 @@ DEFUN_DLD (get_burst_many_chisq_qu_c, args, nargout, "Calculate pol chisq for an
   //return octave_value(chisq);
     
 }
+/*--------------------------------------------------------------------------------*/
