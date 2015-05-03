@@ -1,8 +1,8 @@
-function[pp,ll,dataft,nvec]=mcmc_burst_intensity(data,myopts,freqs,guess,sigs,dt,nu_min,fix_params,true_params)
+function[pp,ll,dataft,nvec,imin]=mcmc_burst_intensity(data,myopts,freqs,guess,sigs,dt,nu_min,fix_params,true_params)
 
 outroot=get_struct_mem(myopts,'outroot','chain_tt.txt');
 nstep=get_struct_mem(myopts,'nstep',3);
-chifun=get_struct_mem(myopts,'func',@get_burst_chisq_c);
+chifun=get_struct_mem(myopts,'func',@get_burst_chisq_cached_c);
 
 
 if ~exist('dt')
@@ -24,12 +24,14 @@ pp=zeros(nstep,numel(guess));
 ll=zeros(nstep,1);
 cur=guess;
 
-%nvec=0.5./mean(abs(dataft(imin:end,:)).^2);
 noises=0.5*mean(abs(dataft(imin:end,:)).^2);
 nvec=1.0./noises;
 
+unwind_protect
 
-%nmat=repmat(nvec,[n 1]);
+dataptr=floatcomplex2ptr(dataft);
+model=floatcomplex2ptr(dataft);
+
 
 
 if exist('true_params')
@@ -38,30 +40,27 @@ end
 
 
 try
-  myid=mpi_comm_rank;
+  myid=mpi_comm_rank+1;
   fid=fopen([outroot '_'  num2str(myid)],'w');
 catch
   fid=fopen(outroot,'w');
 end
 
 
-%fwhm=guess(1);
-%scat=guess(2);
-%alpha=guess(3);
-%amp=guess(4);
-%t0=guess(5);
-%DM=guess(6);
-%mod=amp*make_burst_model(dt,n,freqs,fwhm,scat,alpha,t0,DM);
-%chisq=sum(abs(mod-dataft).^2);chisq=sum(chisq.*nvec)
+noamp=guess;noamp(4)=0;
+chi_ref=feval(chifun,noamp,dataptr,freqs,n,nvec,dt,imin,model);
+chi_ref=get_struct_mem(myopts,'chi_ref',chi_ref);disp(['chi_ref is ' sprintf('%14.6f',chi_ref)]);
+tic;chisq=feval(chifun,guess,dataptr,freqs,n,nvec,dt,imin,model)-chi_ref;toc
 
-%tic;chisq=get_burst_chisq_c(guess,dataft,freqs,n,nvec,dt,imin);toc
-tic;chisq=feval(chifun,guess,dataft,freqs,n,nvec,dt,imin);toc
+
+
 
 pp(1,:)=guess;
 ll(1)=chisq;
-
+nrep=1;
 
 for j=2:nstep
+
   if rem(j,50)==0
     disp(j);
   end
@@ -70,33 +69,39 @@ for j=2:nstep
     guess(fix_params)=true_params(fix_params);
   end
 
-  %fwhm=guess(1);
-  %scat=guess(2);
-  %alpha=guess(3);
-  %amp=guess(4);
-  %t0=guess(5);
-  %DM=guess(6); 
-  %mod=amp*make_burst_model(dt,n,freqs,fwhm,scat,alpha,t0,DM);
-  %chisq=sum(abs(mod-dataft).^2);chisq=sum(chisq.*nvec);
+  chisq=feval(chifun,guess,dataptr,freqs,n,nvec,dt,imin,model)-chi_ref;
 
-  chisq=feval(chifun,guess,dataft,freqs,n,nvec,dt,imin);
   if (chisq<ll(j-1))
     disp('should be accepting')
+
   end
 
 
   if (exp(-0.5*(chisq-ll(j-1)))>rand(1))
+    disp('accepting');
+    fprintf(fid,'%d ',nrep);
+    fprintf(fid,'%14.7f ',ll(j-1));
+    fprintf(fid,'%15.9g ',pp(j-1,:));
+    fprintf(fid,'\n');
+    fflush(fid);
+
+
     ll(j)=chisq;
     pp(j,:)=guess;
     cur=guess;
+    nrep=1;
   else
+    disp('not accepting')
     ll(j)=ll(j-1);
     pp(j,:)=cur;
+    nrep=nrep+1;
   end
-  fprintf(fid,'%14.7f ',ll(j));
-  fprintf(fid,'%14.8g ',pp(j,:));
-  fprintf(fid,'\n');
-  fflush(fid);
 
 end
+unwind_protect_cleanup
+disp('cleaning up')
+freeptr(model);
+freeptr(dataptr);
 fclose(fid);
+end_unwind_protect
+
