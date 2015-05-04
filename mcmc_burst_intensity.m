@@ -63,6 +63,7 @@ for j=2:nstep
 
   if rem(j,50)==0
     disp(j);
+    fflush(fid);
   end
   guess=cur+mc_step(sigs);
   if exist('true_params')
@@ -83,7 +84,7 @@ for j=2:nstep
     fprintf(fid,'%14.7f ',ll(j-1));
     fprintf(fid,'%15.9g ',pp(j-1,:));
     fprintf(fid,'\n');
-    fflush(fid);
+    %fflush(fid);
 
 
     ll(j)=chisq;
