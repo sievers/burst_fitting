@@ -9,6 +9,7 @@ autoload('freeptr',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct
 autoload('get_burst_chisq_ampfit_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
 autoload('get_burst_chisq_qu_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
 autoload('get_burst_chisq_qu_cached_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
+autoload('get_burst_chisq_qu_rmpow_cached_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
 autoload('get_burst_chisq_qu_rmpow_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
 autoload('get_burst_many_chisq_qu_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
 

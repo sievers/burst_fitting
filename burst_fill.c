@@ -8,6 +8,7 @@
 //gcc-4.8 -O3 -fopenmp -fPIC --shared --std=c99  burst_fill.c -o libburst_fill.so
 
 #define REF_FREQ 764.2
+#define DM0 4150
 void fill_model_general(float dt, float fwhm, float tau, float scat, float alpha, float t0, float DM, float DM_ind, float *freq, int nfreq, int n, void *mat_in)
 {
 
@@ -17,7 +18,7 @@ void fill_model_general(float dt, float fwhm, float tau, float scat, float alpha
   int nn=1+n/2;
   
   float complex *mat=(float complex *)mat_in;
-  float DM0=4150;
+
   float freq_ref=800.0;
   float sig=fwhm/sqrt(8*log(2))/dt;
   float pi=3.14159265;
@@ -106,7 +107,7 @@ void fill_model(float dt, float fwhm, float scat, float alpha, float t0, float D
   int nn=1+n/2;
   
   float complex *mat=(float complex *)mat_in;
-  float DM0=4150;
+  //float DM0=4150;
   float freq_ref=800.0;
   float sig=fwhm/sqrt(8*log(2))/dt;
   float pi=3.14159265;
@@ -200,7 +201,7 @@ void fill_model_double(float dt, float fwhm, float scat, float alpha, float t0, 
   int nn=1+n/2;
   
   float complex *mat=(float complex *)mat_in;
-  double DM0=4150;
+  //double DM0=4150;
   double freq_ref=800.0;
   double sig=fwhm/sqrt(8*log(2))/dt;
   double pi=3.14159265358979;
@@ -294,7 +295,7 @@ void fill_model_fast(float dt, float fwhm, float scat, float alpha, float t0, fl
   
   float complex *mat=(float complex *)mat_in;
 
-  double DM0=4150;
+  //double DM0=4150;
   double freq_ref=800.0;
   double sig=fwhm/sqrt(8*log(2))/dt;
   double pi=3.14159265;
@@ -382,7 +383,7 @@ void fill_model_fast_general(float dt, float fwhm, float tau, float scat, float 
   
   float complex *mat=(float complex *)mat_in;
 
-  double DM0=4150;
+  //double DM0=4150;
   double freq_ref=800.0;
   double sig=fwhm/sqrt(8*log(2))/dt;
   double pi=3.14159265;
@@ -569,17 +570,30 @@ double calculate_chisq_cached_dmpow(void *dat_in, float *weights, int imin,float
   float tau=0;
   int nn=1+n/2;
   
+  double nu2=700;  //need to adjust t0 and DM to decorrelate the DM index.  Requires a second frequency
+  double a=pow(REF_FREQ,DM_pow+2);
+  double b=REF_FREQ*REF_FREQ/DM0;
+  double c=pow(nu2,DM_pow+2);
+  double d=nu2*nu2/DM0;
+  double e=DM;
+  double f=DM;
+  double DM_new=(f*b-e*d)/(b*c-a*d);
+  double delta_t=(e*c-a*f)/(b*c-a*d);
+
+  //printf("DM, eps, are %12.4f %12.6g, DM_new and dt are %12.4f %12.6g\n",DM,DM_pow+2,DM_new,delta_t);
+
 
   scat=scat*dt;
   tau=tau*dt;
-  t0=1+t0/dt;  //burst_model is expecting t0 to be in samples
+  t0=1+(t0-0*delta_t)/dt;  //burst_model is expecting t0 to be in samples
   //float complex *mat=(float complex *)mat_in;
   float complex *mat=(float complex *)cached_in;
   //fill_model(dt,fwhm,scat,alpha,t0,DM,freq,nfreq,n,mat_in);
   double t1=omp_get_wtime();
   //fill_model_fast(dt,fwhm,scat,alpha,t0,DM,freq,nfreq,n,(void *)mat);
   printf("filling model.\n");
-  fill_model_fast_general(dt,fwhm,tau,scat,alpha,t0,DM,DM_pow,freq,nfreq,n,(void *)mat);
+  //fill_model_fast_general(dt,fwhm,tau,scat,alpha,t0,DM,DM_pow,freq,nfreq,n,(void *)mat);
+  fill_model_fast_general(dt,fwhm,tau,scat,alpha,t0,DM_new,DM_pow,freq,nfreq,n,(void *)mat);
   //printf("params are %12.5g %12.5g %12.5g %12.5g %12.5g %12.5g\n",dt,fwhm,scat,alpha,t0,DM);
   //printf("amps are %12.6f %12.6f %12.6f\n",creal(mat[0]),creal(mat[1]),cimag(mat[1]));
   //printf("time here is %12.5f\n",omp_get_wtime()-t1);
@@ -884,7 +898,7 @@ double calculate_chisq_qu_cached(void *dat_q_in, void *dat_u_in, float *weights,
   float complex *mat=(float complex *)myscratch;
   //fill_model(dt,fwhm,scat,alpha,t0,DM,freq,nfreq,n,mat_in);
   double t1=omp_get_wtime();
-  fill_model(dt,fwhm,scat,alpha,t0,DM,freq,nfreq,n,(void *)mat);
+  fill_model_fast_general(dt,fwhm,0,scat,alpha,t0,DM,-2.0,freq,nfreq,n,(void *)mat);
   //printf("time here is %12.5f\n",omp_get_wtime()-t1);
   float complex *dat_q=(float complex *)dat_q_in;
   float complex *dat_u=(float complex *)dat_u_in;
@@ -903,15 +917,15 @@ double calculate_chisq_qu_cached(void *dat_q_in, void *dat_u_in, float *weights,
     float nu_ref=793;
     float lambda_ref =299.79/nu_ref;
     float fac=lambda_ref*lambda_ref+0.010973; //.010973 comes from looking at some likelihoods
-    if (j==0)
-      printf("fac is %12.6f\n",fac);
+    //if (j==0)
+    //  printf("fac is %12.6f\n",fac);
     float amp_q=amp*cos(RM*(lambda*lambda-fac)+phi);
     float amp_u=amp*sin(RM*(lambda*lambda-fac)+phi);
     float mycos=cos(RM*(lambda*lambda-fac)+phi);
     float mysin=sin(RM*(lambda*lambda-fac)+phi);
    
-    if (j==0)  
-      printf("lambda is %12.4f and amps are %12.4f %12.4f %12.6f %12.6f %12.6f\n",lambda,amp_q,amp_u,creal(mat[0]),creal(mat[1]),cimag(mat[1]));
+    //if (j==0)  
+    //  printf("lambda is %12.4f and amps are %12.4f %12.4f %12.6f %12.6f %12.6f\n",lambda,amp_q,amp_u,creal(mat[0]),creal(mat[1]),cimag(mat[1]));
 
     all_chisq[j]=0;
     for (int i=imin;i<nn;i++)  {
@@ -926,8 +940,91 @@ double calculate_chisq_qu_cached(void *dat_q_in, void *dat_u_in, float *weights,
 #endif
       all_chisq[j]+=(creal(deltq)*creal(deltq)+cimag(deltq)*cimag(deltq)+creal(deltu)*creal(deltu)+cimag(deltu)*cimag(deltu));
     }
-    if (j==0)
-      printf("all_chisq[%d] is %12.5f, data are %12.4f %12.4f\n",j,all_chisq[j],creal(dat_u[0]),cimag(dat_u[0]));
+    //if (j==0)
+    //  printf("all_chisq[%d] is %12.5f, data are %12.4f %12.4f\n",j,all_chisq[j],creal(dat_u[0]),cimag(dat_u[0]));
+      
+    all_chisq[j]*=weights[j];
+  }
+  //printf("time here is %12.5f\n",omp_get_wtime()-t1);
+  double chisq=0;
+  for (int i=0;i<nfreq;i++)
+    chisq+=all_chisq[i];
+  
+  free(all_chisq);
+  //free(mat);
+  return chisq;
+}
+
+
+
+/*--------------------------------------------------------------------------------*/
+
+double calculate_chisq_qu_rmpow_cached(void *dat_q_in, void *dat_u_in, float *weights, int imin,float dt,float *params, float *freq, int nfreq, int n, void *myscratch)
+
+{
+
+  float fwhm=params[0];
+  float scat=1.0/params[1];
+  float alpha=params[2];
+  float amp=params[3];
+  float t0=params[4];
+  float DM=params[5];
+  float RM=params[6];
+  float phi=params[7]; 
+  float rmpow=params[8];
+  int nn=1+n/2;
+
+  //printf("fwhm, scat, amp, RM, and phi are %12.4g %12.4g %12.4g %12.4g %12.4g\n",fwhm,scat,amp,RM,phi);
+  
+
+  scat=scat*dt;
+  t0=1+t0/dt;  //burst_model is expecting t0 to be in samples
+  //float complex *mat=(float complex *)mat_in;
+  float complex *mat=(float complex *)myscratch;
+  //fill_model(dt,fwhm,scat,alpha,t0,DM,freq,nfreq,n,mat_in);
+  double t1=omp_get_wtime();
+  fill_model_fast_general(dt,fwhm,0,scat,alpha,t0,DM,-2.0,freq,nfreq,n,(void *)mat);
+  //printf("time here is %12.5f\n",omp_get_wtime()-t1);
+  float complex *dat_q=(float complex *)dat_q_in;
+  float complex *dat_u=(float complex *)dat_u_in;
+  double *all_chisq=(double *)malloc(sizeof(double)*nfreq);
+
+  
+  //find that if RM goes up by 1, phi should go down by .143
+  //so, to keep phi constant, should be RM*(lambda^2-.143)
+  //implies lambda_ref is .3777,and nu_ref is 793 
+
+  float lambda_ref=299.79/REF_FREQ;
+  float lambda_0=299.79/700;
+  float RM_use=RM*( (lambda_ref*lambda_ref-lambda_0*lambda_0)/(pow(lambda_ref,rmpow)-pow(lambda_0,rmpow)));
+
+#pragma omp parallel for
+  for (int j=0;j<nfreq;j++) {
+    float lambda=299.79/freq[j];
+    float lambda_ref =299.79/REF_FREQ;
+    float fac=pow(lambda,rmpow)-pow(lambda_ref,rmpow);
+
+    float mycos=cos(RM_use*fac+phi);
+    float mysin=sin(RM_use*fac+phi);
+   
+    //if (j==0)  
+    //  printf("lambda is %12.4f and amps are %12.4f %12.4f %12.6f %12.6f %12.6f\n",lambda,amp_q,amp_u,creal(mat[0]),creal(mat[1]),cimag(mat[1]));
+
+    all_chisq[j]=0;
+    for (int i=imin;i<nn;i++)  {
+#if 0
+      double complex deltq=amp_q*mat[j*nn+i]-dat_q[j*nn+i];
+      double complex deltu=amp_u*mat[j*nn+i]-dat_u[j*nn+i];
+#else
+      float complex myq=mycos*dat_q[j*nn+i]+mysin*dat_u[j*nn+i];
+      float  complex myu=0-mysin*dat_q[j*nn+i]+mycos*dat_u[j*nn+i];
+      double complex deltq=myq-amp*mat[j*nn+i];
+      double complex deltu=myu;
+#endif
+      all_chisq[j]+=(creal(deltq)*creal(deltq)+cimag(deltq)*cimag(deltq)+creal(deltu)*creal(deltu)+cimag(deltu)*cimag(deltu));
+    }
+    //if (j==0)
+    //  printf("all_chisq[%d] is %12.5f, data are %12.4f %12.4f\n",j,all_chisq[j],creal(dat_u[0]),cimag(dat_u[0]));
       
     all_chisq[j]*=weights[j];
   }

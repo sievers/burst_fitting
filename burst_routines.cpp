@@ -325,6 +325,32 @@ DEFUN_DLD (get_burst_chisq_qu_cached_c, args, nargout, "Calculate polarized chis
 }
 /*--------------------------------------------------------------------------------*/
 
+
+DEFUN_DLD (get_burst_chisq_qu_rmpow_cached_c, args, nargout, "Calculate polarized chisq for an FRB with non-standard rotation measure response, brute-force.  data should already be cached.\n")
+{
+  if (args.length()<9) {
+    printf("Need 9 args to get_burst_chisq_qu_cached_c.\n");
+    return octave_value_list();
+  }
+  FloatColumnVector guess=args(0).float_column_vector_value();
+
+
+  void *qft=get_pointer(args(1));
+  void *uft=get_pointer(args(2));
+  FloatColumnVector freqs=args(3).float_column_vector_value();
+  int n=(int)get_value(args(4));
+  FloatColumnVector nvec=args(5).float_column_vector_value();
+  float dt=(float)get_value(args(6));
+  int imin=(int)get_value(args(7));
+  void *myscratch=get_pointer(args(8));
+
+  double chisq=calculate_chisq_qu_rmpow_cached(qft,uft,nvec.fortran_vec(),imin,dt,guess.fortran_vec(),freqs.fortran_vec(),freqs.length(),n,myscratch);
+
+  return octave_value(chisq);
+    
+}
+/*--------------------------------------------------------------------------------*/
+
 DEFUN_DLD (get_burst_chisq_ampfit_c, args, nargout, "Calculate chisq for an FRB, brute-force\n")
 {
   if (args.length()<7) {
