@@ -47,7 +47,7 @@ catch
 end
 
 
-noamp=guess;noamp(4)=0;
+noamp=guess;noamp(4)=0;noamp(3)=0;
 chi_ref=feval(chifun,noamp,dataptr,freqs,n,nvec,dt,imin,model);
 chi_ref=get_struct_mem(myopts,'chi_ref',chi_ref);disp(['chi_ref is ' sprintf('%14.6f',chi_ref)]);
 tic;chisq=feval(chifun,guess,dataptr,freqs,n,nvec,dt,imin,model)-chi_ref;toc
@@ -72,14 +72,14 @@ for j=2:nstep
 
   chisq=feval(chifun,guess,dataptr,freqs,n,nvec,dt,imin,model)-chi_ref;
 
-  if (chisq<ll(j-1))
-    disp('should be accepting')
+  %if (chisq<ll(j-1))
+  % disp('should be accepting')
 
-  end
+  %end
 
 
   if (exp(-0.5*(chisq-ll(j-1)))>rand(1))
-    disp('accepting');
+    %disp('accepting');
     fprintf(fid,'%d ',nrep);
     fprintf(fid,'%14.7f ',ll(j-1));
     fprintf(fid,'%15.9g ',pp(j-1,:));
@@ -92,7 +92,7 @@ for j=2:nstep
     cur=guess;
     nrep=1;
   else
-    disp('not accepting')
+    %disp('not accepting')
     ll(j)=ll(j-1);
     pp(j,:)=cur;
     nrep=nrep+1;

@@ -372,6 +372,94 @@ void fill_model_fast(float dt, float fwhm, float scat, float alpha, float t0, fl
 
 
 /*--------------------------------------------------------------------------------*/
+/*--------------------------------------------------------------------------------*/
+void fill_model_fast_scatfit(float dt, float fwhm, float scat, float scatpow, float alpha, float t0, float DM, float *freq, int nfreq, int n, void *mat_in)
+{
+
+  //printf("dt, fwhm, scat, alpha, t0, and DM are %14.5g %14.5g %14.5g %14.5g %14.5g %14.5g\n",dt,fwhm,scat,alpha,t0,DM);
+
+  //scat=scat*dt;
+  int nn=1+n/2;
+  
+  float complex *mat=(float complex *)mat_in;
+
+  //double DM0=4150;
+  double freq_ref=800.0;
+  double sig=fwhm/sqrt(8*log(2))/dt;
+  double pi=3.14159265;
+  double *dm_lags=(double *)malloc(sizeof(double)*nfreq);
+  double *sigvec=(double *)malloc(sizeof(double)*nn);
+  for (int i=0;i<nfreq;i++) {
+    dm_lags[i]=DM0*DM/(freq[i]*freq[i]);
+    dm_lags[i]=dm_lags[i]/dt;
+  }
+  double lag_min=dm_lags[0];
+  for (int i=1;i<nfreq;i++)
+    if (dm_lags[i]<lag_min)
+      lag_min=dm_lags[i];
+  for (int i=0;i<nfreq;i++)
+    dm_lags[i]-=lag_min;
+
+
+  for (int i=0;i<nn;i++)  {
+    double fac=2*pi*sig*i/n;
+    sigvec[i]=exp(-0.5*fac*fac);
+  }
+  //sigvec[i]=exp(-0.5dm_lags[i]=DM0*DM/(freq[i]*freq[i]);
+  
+
+
+  double complex *aa2exp=(double complex *)malloc(nn*sizeof(double complex));
+  double complex *naa2exp=(double complex *)malloc(nn*sizeof(double complex));
+  for (int i=0;i<nn;i++) {
+    double complex aa2=-2*pi*i/n*I;
+    aa2exp[i]=cexp(aa2);
+    naa2exp[i]=cexp(aa2*n);
+    
+  }
+
+#pragma omp parallel for
+  for (int j=0;j<nfreq;j++) {
+
+    
+    double mylag=dm_lags[j]+t0;
+    double fac=freq[j]/freq_ref;
+    double myscat=scat*pow(fac,scatpow);
+    
+    double mynorm=(1-exp(-myscat*n))/(1-exp(-myscat))/pow( (freq[j]/freq_ref),alpha);
+    
+    //if (j==1)
+    //printf("things are %12.5g %12.5g %12.5g\n",mylag,myscat,mynorm);
+    double aa1=-myscat;
+    double aa1exp=exp(aa1);
+    double naa1exp=exp(n*aa1);
+    double complex lagfac=cexp(-2*pi*I*mylag/n);
+    double complex lagvec=1.0;
+    for (int i=0;i<nn;i++) {
+      naa1exp*=aa1exp;
+
+
+      double complex scatvec=(1-naa1exp*naa2exp[i])/(1-aa1exp*aa2exp[i]);
+      scatvec=scatvec/mynorm;
+      //float complex lagvec=cexp(-2*pi*I*i*mylag/n);      
+      mat[j*nn+i]=sigvec[i]*scatvec*lagvec;
+      lagvec*=lagfac;
+    }
+  }
+
+  //printf("second element is %12.6g %12.6g\n",creal(mat[1]),cimag(mat[1]));
+
+  //printf("hello from C2!\n");
+  //mat[2]=4+5I;
+  free(sigvec);
+  free(dm_lags);
+  free(aa2exp);
+  free(naa2exp);
+
+}
+
+
+/*--------------------------------------------------------------------------------*/
 
 void fill_model_fast_general(float dt, float fwhm, float tau, float scat, float alpha, float t0, float DM, float DM_ind, float *freq, int nfreq, int n, void *mat_in)
 {
@@ -509,7 +597,6 @@ double calculate_chisq(void *dat_in, float *weights, int imin,float dt, float fw
 
 /*--------------------------------------------------------------------------------*/
 
-
 double calculate_chisq_cached(void *dat_in, float *weights, int imin,float dt, float *params, float *freq, int nfreq, int n, void *cached_in)
 {
 
@@ -539,6 +626,104 @@ double calculate_chisq_cached(void *dat_in, float *weights, int imin,float dt, f
   for (int j=0;j<nfreq;j++) {
     all_chisq[j]=0;
     for (int i=imin;i<nn;i++)  {
+      double complex delt=amp*mat[j*nn+i]-dat[j*nn+i];
+      all_chisq[j]+=(creal(delt)*creal(delt)+cimag(delt)*cimag(delt));
+    }
+    all_chisq[j]*=weights[j];
+  }
+  //printf("time here is %12.5f\n",omp_get_wtime()-t1);
+  double chisq=0;
+  for (int i=0;i<nfreq;i++)
+    chisq+=all_chisq[i];
+  
+  free(all_chisq);
+  //free(mat);
+  return chisq;
+}
+
+/*--------------------------------------------------------------------------------*/
+double calculate_chisq_scatfit_cached(void *dat_in, float *weights, int imin,float dt, float *params, float *freq, int nfreq, int n, void *cached_in)
+{
+
+  float fwhm=params[0];
+  float scat=1.0/params[1];
+  float alpha=params[2];
+  float amp=params[3];
+  float t0=params[4];
+  float DM=params[5];
+  float scatpow=params[6];
+  
+  int nn=1+n/2;
+  
+
+  scat=scat*dt;
+  t0=1+t0/dt;  //burst_model is expecting t0 to be in samples
+  //float complex *mat=(float complex *)mat_in;
+  float complex *mat=(float complex *)cached_in;
+  //fill_model(dt,fwhm,scat,alpha,t0,DM,freq,nfreq,n,mat_in);
+  double t1=omp_get_wtime();
+  fill_model_fast_scatfit(dt,fwhm,scat,scatpow,alpha,t0,DM,freq,nfreq,n,(void *)mat);
+  //printf("params are %12.5g %12.5g %12.5g %12.5g %12.5g %12.5g\n",dt,fwhm,scat,alpha,t0,DM);
+  //printf("amps are %12.6f %12.6f %12.6f\n",creal(mat[0]),creal(mat[1]),cimag(mat[1]));
+  //printf("time here is %12.5f\n",omp_get_wtime()-t1);
+  float complex *dat=(float complex *)dat_in;
+  double *all_chisq=(double *)malloc(sizeof(double)*nfreq);
+#pragma omp parallel for
+  for (int j=0;j<nfreq;j++) {
+    all_chisq[j]=0;
+    for (int i=imin;i<nn;i++)  {
+      double complex delt=amp*mat[j*nn+i]-dat[j*nn+i];
+      all_chisq[j]+=(creal(delt)*creal(delt)+cimag(delt)*cimag(delt));
+    }
+    all_chisq[j]*=weights[j];
+  }
+  //printf("time here is %12.5f\n",omp_get_wtime()-t1);
+  double chisq=0;
+  for (int i=0;i<nfreq;i++)
+    chisq+=all_chisq[i];
+  
+  free(all_chisq);
+  //free(mat);
+  return chisq;
+}
+
+/*--------------------------------------------------------------------------------*/
+
+double calculate_chisq_linfit_cached(void *dat_in, float *weights, int imin,float dt, float *params, float *freq, int nfreq, int n, void *cached_in)
+{
+
+  float fwhm=params[0];
+  float scat=1.0/params[1];
+  //float alpha=params[2];
+  //float amp=params[3];
+  float slope=params[2];
+  float offset=params[3];
+  float t0=params[4];
+  float DM=params[5];
+
+  int nn=1+n/2;
+  
+
+  scat=scat*dt;
+  t0=1+t0/dt;  //burst_model is expecting t0 to be in samples
+  //float complex *mat=(float complex *)mat_in;
+  float complex *mat=(float complex *)cached_in;
+  //fill_model(dt,fwhm,scat,alpha,t0,DM,freq,nfreq,n,mat_in);
+  double t1=omp_get_wtime();
+  float alpha=0.0;
+  fill_model_fast(dt,fwhm,scat,alpha,t0,DM,freq,nfreq,n,(void *)mat);
+  //printf("params are %12.5g %12.5g %12.5g %12.5g %12.5g %12.5g\n",dt,fwhm,scat,alpha,t0,DM);
+  //printf("amps are %12.6f %12.6f %12.6f\n",creal(mat[0]),creal(mat[1]),cimag(mat[1]));
+  //printf("time here is %12.5f\n",omp_get_wtime()-t1);
+  float complex *dat=(float complex *)dat_in;
+  double *all_chisq=(double *)malloc(sizeof(double)*nfreq);
+#pragma omp parallel for
+  for (int j=0;j<nfreq;j++) {
+    all_chisq[j]=0;
+    for (int i=imin;i<nn;i++)  {
+      float nu_ref=800.0;
+      float nu_width=100.0;
+      double amp=offset+slope*(freq[j]-nu_ref)/nu_width;
       double complex delt=amp*mat[j*nn+i]-dat[j*nn+i];
       all_chisq[j]+=(creal(delt)*creal(delt)+cimag(delt)*cimag(delt));
     }

@@ -2,6 +2,8 @@ autoload('octave_pulsars_test',fullfile(fileparts(mfilename("fullpath")),'burst_
 autoload('make_burst_model_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
 autoload('get_burst_chisq_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
 autoload('get_burst_chisq_cached_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
+autoload('get_burst_chisq_scatfit_cached_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
+autoload('get_burst_chisq_linfit_cached_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
 autoload('get_burst_chisq_tau_cached_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
 autoload('get_burst_chisq_dmpow_cached_c',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));
 autoload('floatcomplex2ptr',fullfile(fileparts(mfilename("fullpath")),'burst_routines.oct'));

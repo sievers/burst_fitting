@@ -14,3 +14,5 @@ double calculate_chisq_qu_cached(void *dat_q_in, void *dat_u_in, float *weights,
 double calculate_chisq_cached_tau(void *dat_in, float *weights, int imin,float dt, float *params, float *freq, int nfreq, int n, void *cached_in);
 double calculate_chisq_cached_dmpow(void *dat_in, float *weights, int imin,float dt, float *params, float *freq, int nfreq, int n, void *cached_in);
 double calculate_chisq_qu_rmpow_cached(void *dat_q_in, void *dat_u_in, float *weights, int imin,float dt,float *params, float *freq, int nfreq, int n, void *myscratch);
+double calculate_chisq_linfit_cached(void *dat_in, float *weights, int imin,float dt, float *params, float *freq, int nfreq, int n, void *cached_in);
+double calculate_chisq_scatfit_cached(void *dat_in, float *weights, int imin,float dt, float *params, float *freq, int nfreq, int n, void *cached_in);
