@@ -21,3 +21,8 @@ double calculate_chisq_real_cached(void *dat_in, double *weights, double dt, dou
 void fill_model_real_general(double dt, double fwhm, double scat, double scatpow, double alpha, double t0, double DM, double DM_pow, double *freq, int nfreq, int n, float *mat_in, int *imin, int *imax);
 double calculate_chisq_general_real_cached(void *dat_in, double *weights, double dt, double *params, double *freq, int nfreq, int n, void *cached_in);
 double calculate_chisq_qu_real_cached(void *q_in, void *u_in,double *weights, double dt, double *params, double *freq, int nfreq, int n, void *cached_in);
+double calculate_chisq_qu_rmpow_real_cached(void *q_in, void *u_in,double *weights, double dt, double *params, double *freq, int nfreq, int n, void *cached_in);
+double calculate_chisq_linfit_real_cached(void *dat_in, double *weights, double dt, double *params, double *freq, int nfreq, int n, void *cached_in);
+double calculate_chisq_qu_ramp_real_cached(void *q_in, void *u_in,double *weights, double dt, double *params, double *freq, int nfreq, int n, void *cached_in);
+void fill_model_real_qu_swing(double dt, double fwhm, double scat, double alpha, double t0, double DM, double omega, double *freq, int nfreq, int n, void *mat_in, int *imin, int *imax);
+double calculate_chisq_qu_ramp_conv_real_cached(void *q_in, void *u_in,double *weights, double dt, double *params, double *freq, int nfreq, int n, void *cached_in);

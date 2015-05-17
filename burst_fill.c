@@ -3,10 +3,14 @@
 #include <math.h>
 #include <complex.h>
 #include <omp.h>
+#include <cerf.h>
 
 //gcc-4.8 -O3 -fPIC --shared --std=c99  burst_fill.c -o libburst_fill.so
 //gcc-4.8 -O3 -fopenmp -fPIC --shared --std=c99  burst_fill.c -o libburst_fill.so
 // gcc -O3 -fopenmp -fPIC --shared --std=c99  burst_fill.c -o libburst_fill.so 
+// gcc -I/home/sievers/local/include -O3 -fopenmp -fPIC --shared --std=c99  burst_fill.c -o libburst_fill.so
+
+
 #define REF_FREQ 764.2
 
 //#define DM0 4150
@@ -460,6 +464,67 @@ void fill_model_fast_scatfit(float dt, float fwhm, float scat, float scatpow, fl
 
 }
 
+/*--------------------------------------------------------------------------------*/
+static inline float complex cerf_func(double omega, double sig, double tau, double t)
+{
+  complex double myshift=I*omega*sig*sig;
+  complex double erfarg=(sig*sig/tau-(t-myshift))/sqrt(2)/sig;
+  complex double exparg=-(t-myshift)/tau;
+  double mynorm=exp(-0.5*sig*sig*(omega*omega-1/tau/tau))/2/tau;
+  return mynorm*cexp(exparg)*cerfc(erfarg);
+}
+/*--------------------------------------------------------------------------------*/
+
+void fill_model_real_qu_swing(double dt, double fwhm, double scat, double alpha, double t0, double DM, double omega, double *freq, int nfreq, int n, void *mat_in, int *imin, int *imax)
+{
+  float complex *mat=(float complex *)mat_in;
+  //printf("input parameters are %10.5f %12.7f %12.7f %8.4f %12.5f %12.4f\n",dt,fwhm,scat,alpha,t0,DM);
+  double scat_use=scat/dt;
+  double sig=fwhm/sqrt(8*log(2))/dt;
+  int sig_width=10;
+  int scat_width=20;
+  double rt2=sqrt(2.0);
+
+
+#pragma omp parallel for
+  for (int ifreq=0;ifreq<nfreq;ifreq++) {
+    double amp=pow(freq[ifreq]/REF_FREQ,alpha);
+    double dm_lag=DM0*DM*(1.0/freq[ifreq]/freq[ifreq]-1.0/REF_FREQ/REF_FREQ);
+    double myscat=scat_use*pow(freq[ifreq]/REF_FREQ,-4);
+    double myarr=(t0+dm_lag)/dt;
+    int istart=myarr-sig*sig_width-1;
+    int istop=myarr+sig*sig_width+myscat*scat_width+1;
+    if (istart<0)
+      istart=0;
+    if (istop>=n)
+      istop=n-1;
+    
+    //if we want to calculate a fast chi^2, let the calling function know what the non-zero 
+    //part of the function are
+    if (imin)
+      imin[ifreq]=istart;
+    if (imax)
+      imax[ifreq]=istop;
+
+    //double norm=0.5/myscat*exp(0.5*sig*sig/myscat/myscat)*amp;
+    double erfpart=sig/rt2/myscat;
+    double complex myshift=I*omega*sig*sig;
+    for (int i=istart;i<=istop;i++) {
+      double t=i-myarr;
+
+      float complex f0=cerf_func(omega,sig,myscat,t);
+      float complex f1=cerf_func(omega,sig,myscat,t+0.25);
+      float complex f2=cerf_func(omega,sig,myscat,t+0.5);
+      float complex f3=cerf_func(omega,sig,myscat,t+0.75);
+      float complex f4=cerf_func(omega,sig,myscat,t+1.0);
+      //mat[ifreq*n+i]=norm*(7*f0+32*f1+12*f2+32*f3+7*f4)/90.0;
+      mat[ifreq*n+i]=amp*(7*f0+32*f1+12*f2+32*f3+7*f4)/90.0;
+    }
+
+  }        
+}
+
+
 
 /*--------------------------------------------------------------------------------*/
 
@@ -496,12 +561,25 @@ void fill_model_real(double dt, double fwhm, double scat, double alpha, double t
     for (int i=istart;i<=istop;i++) {
       double t=i-myarr;
 #if 1
-      double f0=erfc(erfpart-t/(rt2*sig))*exp(-t/myscat);
-      double t1=t+0.25;double f1=erfc(erfpart-t1/(rt2*sig))*exp(-t1/myscat);
-      double t2=t+0.5;double f2=erfc(erfpart-t2/(rt2*sig))*exp(-t2/myscat);
-      double t3=t+0.75;double f3=erfc(erfpart-t3/(rt2*sig))*exp(-t3/myscat);
-      double t4=t+1.0;double f4=erfc(erfpart-t4/(rt2*sig))*exp(-t4/myscat);
-      mat_in[ifreq*n+i]=norm*(7*f0+32*f1+12*f2+32*f3+7*f4)/90.0;
+      if (myscat>0.05*sig) {
+	double f0=erfc(erfpart-t/(rt2*sig))*exp(-t/myscat);
+	double t1=t+0.25;double f1=erfc(erfpart-t1/(rt2*sig))*exp(-t1/myscat);
+	double t2=t+0.5;double f2=erfc(erfpart-t2/(rt2*sig))*exp(-t2/myscat);
+	double t3=t+0.75;double f3=erfc(erfpart-t3/(rt2*sig))*exp(-t3/myscat);
+	double t4=t+1.0;double f4=erfc(erfpart-t4/(rt2*sig))*exp(-t4/myscat);
+	mat_in[ifreq*n+i]=norm*(7*f0+32*f1+12*f2+32*f3+7*f4)/90.0;
+      }
+      else {
+	t=t-myscat;
+	double f0=exp(-t*t/(2*sig*sig));
+	double t1=t+0.25;double f1=exp(-t1*t1/(2*sig*sig));
+	double t2=t+0.5;double f2=exp(-t2*t2/(2*sig*sig));
+	double t3=t+0.75;double f3=exp(-t3*t3/(2*sig*sig));
+	double t4=t+1.0;double f4=exp(-t4*t4/(2*sig*sig));
+	norm=amp/sqrt(2*3.141592653589793)/sig;
+	mat_in[ifreq*n+i]=norm*(7*f0+32*f1+12*f2+32*f3+7*f4)/90.0;
+	
+      }
 #else
       //if ((ifreq==0)&&(i==istart))
       //	printf("t is %12.5f%12.5f\n",t,myarr);
@@ -763,6 +841,9 @@ double calculate_chisq_real_cached(void *dat_in, double *weights, double dt, dou
   double t0=params[4];
   double DM=params[5];
 
+  if (scat<0)
+    return 1e20;
+
   int *imin=(int *)malloc(sizeof(int)*(nfreq));
   int *imax=(int *)malloc(sizeof(int)*(nfreq));
 
@@ -801,6 +882,58 @@ double calculate_chisq_real_cached(void *dat_in, double *weights, double dt, dou
 
 /*--------------------------------------------------------------------------------*/
 
+double calculate_chisq_linfit_real_cached(void *dat_in, double *weights, double dt, double *params, double *freq, int nfreq, int n, void *cached_in)
+{
+
+  double fwhm=params[0];
+  double scat=params[1];
+  //double alpha=params[2];
+  //double amp=params[3];
+  double alpha=0.0;
+  double slope=params[2];
+  double offset=params[3];
+  double t0=params[4];
+  double DM=params[5];
+
+  int *imin=(int *)malloc(sizeof(int)*(nfreq));
+  int *imax=(int *)malloc(sizeof(int)*(nfreq));
+
+  float *mat=(float *)cached_in;
+
+  double t1=omp_get_wtime();
+  fill_model_real(dt,fwhm,scat,alpha,t0,DM,freq,nfreq,n,(void *)mat,imin,imax);
+
+  float *dat=(float *)dat_in;
+  double *all_chisq=(double *)malloc(sizeof(double)*nfreq);
+  double *all_chisq_ref=(double *)malloc(sizeof(double)*nfreq);
+#pragma omp parallel for
+  for (int j=0;j<nfreq;j++) {
+    all_chisq[j]=0;
+    all_chisq_ref[j]=0;
+    double nu_width=100.0;
+    double amp=offset+slope*(freq[j]-REF_FREQ)/nu_width;
+    for (int i=imin[j];i<=imax[j];i++)  {
+      double delt=amp*mat[j*n+i]-dat[j*n+i];
+      all_chisq[j]+=delt*delt;
+      all_chisq_ref[j]+=dat[j*n+i]*dat[j*n+i];
+    }
+    //all_chisq[j]*=weights[j];
+    all_chisq[j]=weights[j]*(all_chisq[j]-all_chisq_ref[j]);
+
+  }
+  //printf("time here is %12.5f\n",omp_get_wtime()-t1);
+  double chisq=0;
+  for (int i=0;i<nfreq;i++)
+    chisq+=(all_chisq[i]);
+  free(imin);
+  free(imax);
+  free(all_chisq);
+  free(all_chisq_ref);
+  //free(mat);
+  return chisq;
+}
+
+/*--------------------------------------------------------------------------------*/
 
 double calculate_chisq_qu_real_cached(void *q_in, void *u_in,double *weights, double dt, double *params, double *freq, int nfreq, int n, void *cached_in)
 {
@@ -840,6 +973,229 @@ double calculate_chisq_qu_real_cached(void *q_in, void *u_in,double *weights, do
     double fac=lambda_ref*lambda_ref;
     double mycos=cos(RM*(lambda*lambda-fac)+phi);
     double mysin=sin(RM*(lambda*lambda-fac)+phi);
+    for (int i=imin[j];i<=imax[j];i++)  {
+      double myq=mycos*q[j*n+i]+mysin*u[j*n+i];
+      double myu=-mysin*q[j*n+i]+mycos*u[j*n+i];
+      double delt=amp*mat[j*n+i]-myq;
+      
+      all_chisq[j]+=delt*delt+myu*myu;
+      all_chisq_ref[j]+=myq*myq+myu*myu;
+    }
+    //all_chisq[j]*=weights[j];
+    all_chisq[j]=weights[j]*(all_chisq[j]-all_chisq_ref[j]);
+
+  }
+  //printf("time here is %12.5f\n",omp_get_wtime()-t1);
+  double chisq=0;
+  for (int i=0;i<nfreq;i++)
+    chisq+=(all_chisq[i]);
+  free(imin);
+  free(imax);
+  free(all_chisq);
+  free(all_chisq_ref);
+  //free(mat);
+  return chisq;
+}
+
+/*--------------------------------------------------------------------------------*/
+
+double calculate_chisq_qu_ramp_real_cached(void *q_in, void *u_in,double *weights, double dt, double *params, double *freq, int nfreq, int n, void *cached_in)
+{
+
+  double fwhm=params[0];
+  double scat=params[1];
+  double alpha=params[2];
+  double amp=params[3];
+  double t0=params[4];
+  double DM=params[5];
+  double RM=params[6];
+  double phi=params[7];
+  double phigrad=params[8];
+
+
+  if (scat<0)
+    return 1e20;
+
+
+  int *imin=(int *)malloc(sizeof(int)*(nfreq));
+  int *imax=(int *)malloc(sizeof(int)*(nfreq));
+
+  float *mat=(float *)cached_in;
+
+  double t1=omp_get_wtime();
+  fill_model_real(dt,fwhm,scat,alpha,t0,DM,freq,nfreq,n,(void *)mat,imin,imax);
+
+  float *q=(float *)q_in;
+  float *u=(float *)u_in;
+  double *all_chisq=(double *)malloc(sizeof(double)*nfreq);
+  double *all_chisq_ref=(double *)malloc(sizeof(double)*nfreq);
+#pragma omp parallel for
+  for (int j=0;j<nfreq;j++) {
+    all_chisq[j]=0;
+    all_chisq_ref[j]=0;
+    double lambda=299.79/freq[j];
+    double lambda_ref=299.79/REF_FREQ;
+    double fac=lambda_ref*lambda_ref;
+    double t_arr=t0+DM*DM0*(1/freq[j]/freq[j]-1/REF_FREQ/REF_FREQ);
+    t_arr=t_arr/dt;  //do this in samples.  
+    //if (j==0)
+    // printf("t0 and t_arr are %12.5g %12.5g\n",t0,t_arr);
+    for (int i=imin[j];i<=imax[j];i++)  {
+
+
+
+
+      double mycos=cos(RM*(lambda*lambda-fac)+phigrad*(i-t_arr)+phi);
+      double mysin=sin(RM*(lambda*lambda-fac)+phigrad*(i-t_arr)+phi);
+
+      //if ((i==imin[j])&&(j==0))
+      //if (j==0)
+      //	printf("tarr and imin/imax are %12.6g %d %d, with terms %14.5g %14.5g\n",t_arr,imin[j],imax[j],mycos,mysin);
+
+
+      double myq=mycos*q[j*n+i]+mysin*u[j*n+i];
+      double myu=-mysin*q[j*n+i]+mycos*u[j*n+i];
+      double delt=amp*mat[j*n+i]-myq;
+      
+      all_chisq[j]+=delt*delt+myu*myu;
+      all_chisq_ref[j]+=myq*myq+myu*myu;
+    }
+    //all_chisq[j]*=weights[j];
+    all_chisq[j]=weights[j]*(all_chisq[j]-all_chisq_ref[j]);
+
+  }
+  //printf("time here is %12.5f\n",omp_get_wtime()-t1);
+  double chisq=0;
+  for (int i=0;i<nfreq;i++)
+    chisq+=(all_chisq[i]);
+  free(imin);
+  free(imax);
+  free(all_chisq);
+  free(all_chisq_ref);
+  //free(mat);
+  return chisq;
+}
+
+/*--------------------------------------------------------------------------------*/
+/*--------------------------------------------------------------------------------*/
+
+double calculate_chisq_qu_ramp_conv_real_cached(void *q_in, void *u_in,double *weights, double dt, double *params, double *freq, int nfreq, int n, void *cached_in)
+{
+
+  double fwhm=params[0];
+  double scat=params[1];
+  double alpha=params[2];
+  double amp=params[3];
+  double t0=params[4];
+  double DM=params[5];
+  double RM=params[6];
+  double phi=params[7];
+  double phigrad=params[8];
+
+
+  if (scat<0)
+    return 1e20;
+
+
+  int *imin=(int *)malloc(sizeof(int)*(nfreq));
+  int *imax=(int *)malloc(sizeof(int)*(nfreq));
+
+  float complex *mat=(float complex *)cached_in;
+
+  double t1=omp_get_wtime();
+  fill_model_real_qu_swing(dt,fwhm,scat,alpha,t0,DM,phigrad,freq,nfreq,n,(void *)mat,imin,imax);
+
+  float *q=(float *)q_in;
+  float *u=(float *)u_in;
+  double *all_chisq=(double *)malloc(sizeof(double)*nfreq);
+  double *all_chisq_ref=(double *)malloc(sizeof(double)*nfreq);
+#pragma omp parallel for
+  for (int j=0;j<nfreq;j++) {
+    all_chisq[j]=0;
+    all_chisq_ref[j]=0;
+    double lambda=299.79/freq[j];
+    double lambda_ref=299.79/REF_FREQ;
+    double fac=lambda_ref*lambda_ref;
+    double t_arr=t0+DM*DM0*(1/freq[j]/freq[j]-1/REF_FREQ/REF_FREQ);
+    t_arr=t_arr/dt;  //do this in samples.  
+    //if (j==0)
+    // printf("t0 and t_arr are %12.5g %12.5g\n",t0,t_arr);
+
+    double mycos=cos(RM*(lambda*lambda-fac)+phi);
+    double mysin=sin(RM*(lambda*lambda-fac)+phi);
+
+    for (int i=imin[j];i<=imax[j];i++)  {
+
+      //double mycos=cos(RM*(lambda*lambda-fac)+phigrad*(i-t_arr)+phi);
+      //double mysin=sin(RM*(lambda*lambda-fac)+phigrad*(i-t_arr)+phi);
+
+      double myq=mycos*q[j*n+i]+mysin*u[j*n+i];
+      double myu=-mysin*q[j*n+i]+mycos*u[j*n+i];
+      double qdelt=amp*creal(mat[j*n+i])-myq;
+      double udelt=amp*cimag(mat[j*n+i])-myu;
+      
+      all_chisq[j]+=qdelt*qdelt+udelt*udelt;
+      all_chisq_ref[j]+=myq*myq+myu*myu;
+    }
+    //all_chisq[j]*=weights[j];
+    all_chisq[j]=weights[j]*(all_chisq[j]-all_chisq_ref[j]);
+
+  }
+  //printf("time here is %12.5f\n",omp_get_wtime()-t1);
+  double chisq=0;
+  for (int i=0;i<nfreq;i++)
+    chisq+=(all_chisq[i]);
+  free(imin);
+  free(imax);
+  free(all_chisq);
+  free(all_chisq_ref);
+  //free(mat);
+  return chisq;
+}
+
+/*--------------------------------------------------------------------------------*/
+
+double calculate_chisq_qu_rmpow_real_cached(void *q_in, void *u_in,double *weights, double dt, double *params, double *freq, int nfreq, int n, void *cached_in)
+{
+
+  double fwhm=params[0];
+  double scat=params[1];
+  double alpha=params[2];
+  double amp=params[3];
+  double t0=params[4];
+  double DM=params[5];
+  double RM=params[6];
+  double phi=params[7];
+  double rmpow=params[8];
+
+  if (scat<0)
+    return 1e20;
+
+
+  int *imin=(int *)malloc(sizeof(int)*(nfreq));
+  int *imax=(int *)malloc(sizeof(int)*(nfreq));
+
+  float *mat=(float *)cached_in;
+
+  double t1=omp_get_wtime();
+  fill_model_real(dt,fwhm,scat,alpha,t0,DM,freq,nfreq,n,(void *)mat,imin,imax);
+
+  float *q=(float *)q_in;
+  float *u=(float *)u_in;
+  double *all_chisq=(double *)malloc(sizeof(double)*nfreq);
+  double *all_chisq_ref=(double *)malloc(sizeof(double)*nfreq);
+  double lambda_ref=299.79/REF_FREQ;
+  double lambda_0=299.79/700;
+  double RM_use=RM*( (lambda_ref*lambda_ref-lambda_0*lambda_0)/(pow(lambda_ref,rmpow)-pow(lambda_0,rmpow)));
+#pragma omp parallel for
+  for (int j=0;j<nfreq;j++) {
+    all_chisq[j]=0;
+    all_chisq_ref[j]=0;
+    double lambda=299.79/freq[j];
+    double lambda_ref=299.79/REF_FREQ;
+    double fac=pow(lambda,rmpow)-pow(lambda_ref,rmpow);
+    double mycos=cos(RM_use*fac+phi);
+    double mysin=sin(RM_use*fac+phi);
     for (int i=imin[j];i<=imax[j];i++)  {
       double myq=mycos*q[j*n+i]+mysin*u[j*n+i];
       double myu=-mysin*q[j*n+i]+mycos*u[j*n+i];

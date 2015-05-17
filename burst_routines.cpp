@@ -10,6 +10,7 @@
 //mkoctfile-3.8.0 burst_routines.cpp -lgomp -v
 //mkoctfile-3.8.0 burst_routines.cpp -I. -L. -lburst_fill  -lgomp -v
 //  mkoctfile burst_routines.cpp -I. -L. -lburst_fill  -lgomp -v
+//  mkoctfile burst_routines.cpp -I. -L. -L/home/sievers/local/lib -lburst_fill -lcerf -lgomp -v
 
 #ifdef __cplusplus
 extern "C"
@@ -126,6 +127,7 @@ DEFUN_DLD (make_burst_model_real_c, args, nargout, "Calculate a model for an FRB
   dm(1)=nfreq;
   FloatMatrix mat(dm);
   double t1=omp_get_wtime();
+  memset(mat.fortran_vec(),0,n*nfreq*sizeof(float));
   fill_model_real(dt,fwhm,scat,alpha,t0,DM,freq.fortran_vec(),nfreq,n,mat.fortran_vec(),NULL,NULL);
   double t2=omp_get_wtime();
   printf("model filling took %12.4f seconds.\n",t2-t1);
@@ -135,6 +137,37 @@ DEFUN_DLD (make_burst_model_real_c, args, nargout, "Calculate a model for an FRB
 }
 /*--------------------------------------------------------------------------------*/
 
+DEFUN_DLD (make_burst_model_real_qu_swing_c, args, nargout, "Calculate a model for an FRB, brute-force\n")
+{
+  
+  if (args.length()<9) {
+    printf("need at least 8 arguments to make_burst_model_c.\n");
+    return octave_value_list();
+  }
+  double dt=get_value(args(0));
+  int n=(int)get_value(args(1));
+  ColumnVector freq=args(2).column_vector_value();
+  double fwhm=get_value(args(3));
+  double scat=get_value(args(4));
+  double alpha=get_value(args(5));
+  double t0=get_value(args(6));
+  double DM=get_value(args(7));
+  double omega=get_value(args(8));
+  int nfreq=freq.length();
+  dim_vector dm;
+  dm(0)=n;
+  dm(1)=nfreq;
+  FloatComplexMatrix mat(dm);
+  memset(mat.fortran_vec(),0,2*n*nfreq*sizeof(float));
+  double t1=omp_get_wtime();
+  fill_model_real_qu_swing(dt,fwhm,scat,alpha,t0,DM,omega,freq.fortran_vec(),nfreq,n,mat.fortran_vec(),NULL,NULL);
+  double t2=omp_get_wtime();
+  printf("model filling took %12.4f seconds.\n",t2-t1);
+  
+  return octave_value(mat);
+
+}
+/*--------------------------------------------------------------------------------*/
 
 DEFUN_DLD (make_burst_model_c, args, nargout, "Calculate a model for an FRB, brute-force\n")
 {
@@ -321,6 +354,34 @@ DEFUN_DLD (get_burst_real_chisq_cached_c, args, nargout, "Calculate chisq for an
 }
 /*--------------------------------------------------------------------------------*/
 
+
+DEFUN_DLD (get_burst_real_chisq_linfit_cached_c, args, nargout, "Calculate chisq for an FRB, brute-force, data should already be cached.\n")
+{
+  if (args.length()<7) {
+    printf("Need 7 args to get_burst_real_chisq_linfit_cached_c.\n");
+    return octave_value_list();
+  }
+  ColumnVector guess=args(0).column_vector_value();
+  
+
+  void *datft=get_pointer(args(1));
+  ColumnVector freqs=args(2).column_vector_value();
+  int n=(int)get_value(args(3));
+  ColumnVector nvec=args(4).column_vector_value();
+  double dt=get_value(args(5));
+  void *myscratch=get_pointer(args(6));
+
+
+  //double chisq=calculate_chisq(dat.fortran_vec(),nvec.fortran_vec(),imin,dt,fwhm,scat,alpha,amp,t0,DM,freqs.fortran_vec(),freqs.length(),n,mat.fortran_vec());
+  double chisq=calculate_chisq_linfit_real_cached(datft,nvec.fortran_vec(),dt,guess.fortran_vec(),freqs.fortran_vec(),freqs.length(),n,myscratch);
+  
+
+
+  return octave_value(chisq);
+    
+}
+/*--------------------------------------------------------------------------------*/
+
 DEFUN_DLD (get_burst_real_chisq_qu_cached_c, args, nargout, "Calculate polarized chisq for an FRB, brute-force, data should already be cached.\n")
 {
   if (args.length()<8) {
@@ -341,6 +402,92 @@ DEFUN_DLD (get_burst_real_chisq_qu_cached_c, args, nargout, "Calculate polarized
 
   //double chisq=calculate_chisq(dat.fortran_vec(),nvec.fortran_vec(),imin,dt,fwhm,scat,alpha,amp,t0,DM,freqs.fortran_vec(),freqs.length(),n,mat.fortran_vec());
   double chisq=calculate_chisq_qu_real_cached(q,u,nvec.fortran_vec(),dt,guess.fortran_vec(),freqs.fortran_vec(),freqs.length(),n,myscratch);
+  
+
+
+  return octave_value(chisq);
+    
+}
+/*--------------------------------------------------------------------------------*/
+
+DEFUN_DLD (get_burst_real_chisq_qu_ramp_cached_c, args, nargout, "Calculate polarized chisq for an FRB, brute-force, with a phase gradient w.r.t. time.  data should already be cached.\n")
+{
+  if (args.length()<8) {
+    printf("Need 8 args to get_burst_real_chisq_qu_ramp_cached_c.\n");
+    return octave_value_list();
+  }
+  ColumnVector guess=args(0).column_vector_value();
+  
+
+  void *q=get_pointer(args(1));
+  void *u=get_pointer(args(2));
+  ColumnVector freqs=args(3).column_vector_value();
+  int n=(int)get_value(args(4));
+  ColumnVector nvec=args(5).column_vector_value();
+  double dt=get_value(args(6));
+  void *myscratch=get_pointer(args(7));
+
+
+  //double chisq=calculate_chisq(dat.fortran_vec(),nvec.fortran_vec(),imin,dt,fwhm,scat,alpha,amp,t0,DM,freqs.fortran_vec(),freqs.length(),n,mat.fortran_vec());
+  double chisq=calculate_chisq_qu_ramp_real_cached(q,u,nvec.fortran_vec(),dt,guess.fortran_vec(),freqs.fortran_vec(),freqs.length(),n,myscratch);
+  
+
+
+  return octave_value(chisq);
+    
+}
+/*--------------------------------------------------------------------------------*/
+
+
+DEFUN_DLD (get_burst_real_chisq_qu_ramp_conv_cached_c, args, nargout, "Calculate polarized chisq for an FRB, brute-force, with a phase gradient w.r.t. time.  data should already be cached.\n")
+{
+  if (args.length()<8) {
+    printf("Need 8 args to get_burst_real_chisq_qu_ramp_conv_cached_c.\n");
+    return octave_value_list();
+  }
+  ColumnVector guess=args(0).column_vector_value();
+  
+
+  void *q=get_pointer(args(1));
+  void *u=get_pointer(args(2));
+  ColumnVector freqs=args(3).column_vector_value();
+  int n=(int)get_value(args(4));
+  ColumnVector nvec=args(5).column_vector_value();
+  double dt=get_value(args(6));
+  void *myscratch=get_pointer(args(7));
+
+
+  //double chisq=calculate_chisq(dat.fortran_vec(),nvec.fortran_vec(),imin,dt,fwhm,scat,alpha,amp,t0,DM,freqs.fortran_vec(),freqs.length(),n,mat.fortran_vec());
+  double chisq=calculate_chisq_qu_ramp_conv_real_cached(q,u,nvec.fortran_vec(),dt,guess.fortran_vec(),freqs.fortran_vec(),freqs.length(),n,myscratch);
+  
+
+
+  return octave_value(chisq);
+    
+}
+/*--------------------------------------------------------------------------------*/
+
+
+DEFUN_DLD (get_burst_real_chisq_qu_rmpow_cached_c, args, nargout, "Calculate polarized chisq for an FRB, brute-force, data should already be cached.\n")
+{
+  if (args.length()<8) {
+    printf("Need 8 args to get_burst_real_chisq_qu_rmpow_real_cached_c.\n");
+    return octave_value_list();
+  }
+  ColumnVector guess=args(0).column_vector_value();
+  
+
+  void *q=get_pointer(args(1));
+  void *u=get_pointer(args(2));
+  ColumnVector freqs=args(3).column_vector_value();
+  int n=(int)get_value(args(4));
+  ColumnVector nvec=args(5).column_vector_value();
+  double dt=get_value(args(6));
+  void *myscratch=get_pointer(args(7));
+
+
+  //double chisq=calculate_chisq(dat.fortran_vec(),nvec.fortran_vec(),imin,dt,fwhm,scat,alpha,amp,t0,DM,freqs.fortran_vec(),freqs.length(),n,mat.fortran_vec());
+  double chisq=calculate_chisq_qu_rmpow_real_cached(q,u,nvec.fortran_vec(),dt,guess.fortran_vec(),freqs.fortran_vec(),freqs.length(),n,myscratch);
   
 
 
