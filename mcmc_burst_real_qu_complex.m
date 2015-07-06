@@ -1,28 +1,28 @@
-function[pp,ll,nvec]=mcmc_burst_real(data,myopts,freqs,guess,sigs,dt,fix_params,true_params)
+function[pp,ll,nvec]=mcmc_burst_real_qu_complex(q,u,myopts,freqs,guess,sigs,dt,fix_params,true_params)
 
 outroot=get_struct_mem(myopts,'outroot','chain_tt.txt');
 nstep=get_struct_mem(myopts,'nstep',3);
-chifun=get_struct_mem(myopts,'func',@get_burst_real_chisq_cached_c);
-noise_fac=get_struct_mem(myopts,'noise_scale',1.0);
+chifun=get_struct_mem(myopts,'func',@get_burst_real_chisq_qu_ramp_conv_cached_c);
 
 
 if ~exist('dt')
   dt=1e-3;
 end
-n=size(data,1);
+n=size(q,1);
 
 pp=zeros(nstep,numel(guess));
 ll=zeros(nstep,1);
 cur=guess;
 
-noises=double(std(data))*noise_fac;
+noises=double(std(q));
 nvec=1.0./noises.^2;
 
 unwind_protect
 
-dataptr=float2ptr(data);
-%model=float2ptr(data);
-model=float2ptr(zeros(size(data,1),2*size(data,2)+1));
+qptr=float2ptr(q);
+uptr=float2ptr(u);
+model=floatcomplex2ptr(q+i*u);
+
 
 
 
@@ -39,7 +39,7 @@ catch
 end
 
 
-tic;chisq=feval(chifun,guess,dataptr,freqs,n,nvec,dt,model);toc
+tic;chisq=feval(chifun,guess,qptr,uptr,freqs,n,nvec,dt,model);toc
 
 
 
@@ -60,7 +60,7 @@ for j=2:nstep
     guess(fix_params)=true_params(fix_params);
   end
 
-  chisq=feval(chifun,guess,dataptr,freqs,n,nvec,dt,model);
+  chisq=feval(chifun,guess,qptr,uptr,freqs,n,nvec,dt,model);
 
   if (exp(-0.5*(chisq-ll(j-1)))>rand(1))
     %disp('accepting');
@@ -86,7 +86,8 @@ end
 unwind_protect_cleanup
 disp('cleaning up')
 freeptr(model);
-freeptr(dataptr);
+freeptr(qptr);
+freeptr(uptr);
 fclose(fid);
 end_unwind_protect
 

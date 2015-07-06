@@ -447,7 +447,7 @@ DEFUN_DLD (get_burst_real_chisq_qu_ramp_conv_cached_c, args, nargout, "Calculate
   }
   ColumnVector guess=args(0).column_vector_value();
   
-
+  printf("getting ready to get inputs.\n");
   void *q=get_pointer(args(1));
   void *u=get_pointer(args(2));
   ColumnVector freqs=args(3).column_vector_value();
@@ -455,11 +455,12 @@ DEFUN_DLD (get_burst_real_chisq_qu_ramp_conv_cached_c, args, nargout, "Calculate
   ColumnVector nvec=args(5).column_vector_value();
   double dt=get_value(args(6));
   void *myscratch=get_pointer(args(7));
+  printf("got em.\n");
 
 
   //double chisq=calculate_chisq(dat.fortran_vec(),nvec.fortran_vec(),imin,dt,fwhm,scat,alpha,amp,t0,DM,freqs.fortran_vec(),freqs.length(),n,mat.fortran_vec());
   double chisq=calculate_chisq_qu_ramp_conv_real_cached(q,u,nvec.fortran_vec(),dt,guess.fortran_vec(),freqs.fortran_vec(),freqs.length(),n,myscratch);
-  
+  printf("back\n");
 
 
   return octave_value(chisq);
@@ -829,5 +830,54 @@ DEFUN_DLD (get_burst_many_chisq_qu_c, args, nargout, "Calculate pol chisq for an
   //return retval;
   //return octave_value(chisq);
     
+}
+/*--------------------------------------------------------------------------------*/
+DEFUN_DLD (circshift_mat,args,nargout,"Circularly shift each column of a matrix.\n")
+{
+  FloatMatrix dat=args(0).float_matrix_value();
+  dim_vector dm=dat.dims();
+  ColumnVector shifts=args(1).column_vector_value();
+  int ncol=dm(1);
+  int nrow=dm(0);
+  //printf("Have %d %d rows and columns.\n",nrow,ncol);
+  int *shft=(int *)malloc(sizeof(int)*ncol);
+  double *shiftptr=shifts.fortran_vec();
+  for (int i=0;i<ncol;i++) {
+    shft[i]=shiftptr[i];
+    if (fabs(shft[i]-shiftptr[i])>1e-10) {
+      printf("non-integer shifting going on in circshift_mat.\n");
+      return octave_value_list();
+    }
+  }
+  
+  float *tmp=(float *)malloc(sizeof(float)*nrow);
+  float *dd=dat.fortran_vec();
+  
+  
+  for (int i=0;i<ncol;i++) {    
+    int myshift=shft[i];
+    while (myshift<0)
+      myshift+=nrow;
+    while (myshift>=nrow)
+      myshift -=nrow;
+    if (myshift>0) {  //don't worry about doing anything if shift=0;
+      for (int j=0;j<nrow-myshift;j++) {
+	//printf("assigning %d to %d from shift %d\n",j,j+myshift,myshift);
+	tmp[j+myshift]=dd[nrow*i+j];
+      }
+      for (int j=nrow-myshift;j<nrow;j++) {
+	//printf("assigning %d to %d from shift %d\n",j,j+myshift-nrow,myshift);
+	tmp[j+myshift-nrow]=dd[nrow*i+j];
+      }
+      memcpy(dd+nrow*i,tmp,nrow*sizeof(float));
+      
+    }
+
+  }
+  
+  free(tmp);
+  free(shft);
+  return octave_value(dat);
+
 }
 /*--------------------------------------------------------------------------------*/
